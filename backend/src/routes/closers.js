@@ -208,10 +208,19 @@ router.post('/onboard', async (req, res) => {
 });
 
 // DELETE /api/closers/offboard/:ghlUserId - Offboard a closer
-// DELETE /api/closers/offboard/:ghlUserId - Offboard a closer
 router.delete('/offboard/:ghlUserId', async (req, res) => {
   try {
     const { ghlUserId } = req.params;
+    const { platforms } = req.body || {};
+    
+    // Default to all platforms if none specified
+    const selectedPlatforms = platforms || {
+      googleWorkspace: true,
+      calendly: true,
+      zoom: true,
+      twilio: true,
+      ghl: true
+    };
     
     // SAFETY CHECK 1: Validate user ID format
     if (!ghlUserId || ghlUserId.length < 10) {
@@ -222,6 +231,7 @@ router.delete('/offboard/:ghlUserId', async (req, res) => {
     }
     
     console.log(`[Closers] 🚀 Starting offboarding for GHL user: ${ghlUserId}`);
+    console.log(`[Closers] Selected platforms:`, selectedPlatforms);
 
     // SAFETY CHECK 2: Verify user exists
     const ghlUsers = await ghlService.getUsers();
@@ -248,101 +258,126 @@ router.delete('/offboard/:ghlUserId', async (req, res) => {
     console.log(`[Closers] User ID: ${ghlUserId}`);
 
     const progress = {
-      googleWorkspace: { status: 'pending', error: null },
-      calendly: { status: 'pending', error: null },
-      zoom: { status: 'pending', error: null },
-      twilio: { status: 'pending', error: null },
-      ghl: { status: 'pending', error: null }
+      googleWorkspace: { status: 'skipped', error: null },
+      calendly: { status: 'skipped', error: null },
+      zoom: { status: 'skipped', error: null },
+      twilio: { status: 'skipped', error: null },
+      ghl: { status: 'skipped', error: null }
     };
 
     // Google Workspace (DUMMY - won't do anything)
-    try {
-      console.log('[Closers] Step 1/5: Removing Google Workspace account...');
-      await googleWorkspaceService.deleteAccount(closerEmail);
-      progress.googleWorkspace = { status: 'success', error: null };
-      console.log('[Closers] ✅ Google Workspace account removed (DUMMY)');
-    } catch (error) {
-      console.error('[Closers] ⚠️ Google Workspace removal failed:', error.message);
-      progress.googleWorkspace = { status: 'failed', error: error.message };
+    if (selectedPlatforms.googleWorkspace) {
+      try {
+        console.log('[Closers] Step 1/5: Removing Google Workspace account...');
+        progress.googleWorkspace.status = 'pending';
+        await googleWorkspaceService.deleteAccount(closerEmail);
+        progress.googleWorkspace = { status: 'success', error: null };
+        console.log('[Closers] ✅ Google Workspace account removed (DUMMY)');
+      } catch (error) {
+        console.error('[Closers] ⚠️ Google Workspace removal failed:', error.message);
+        progress.googleWorkspace = { status: 'failed', error: error.message };
+      }
     }
 
-    // Calendly (DUMMY - won't do anything)
-    try {
-      console.log('[Closers] Step 2/5: Removing from Calendly...');
-      await calendlyService.removeUser(closerEmail);
-      progress.calendly = { status: 'success', error: null };
-      console.log('[Closers] ✅ Removed from Calendly (DUMMY)');
-    } catch (error) {
-      console.error('[Closers] ⚠️ Calendly removal failed:', error.message);
-      progress.calendly = { status: 'failed', error: error.message };
+    // Calendly - REAL - Will actually remove user!
+    if (selectedPlatforms.calendly) {
+      try {
+        console.log('[Closers] Step 2/5: Removing from Calendly...');
+        progress.calendly.status = 'pending';
+        
+        // Use email to remove (Calendly finds by email)
+        await calendlyService.removeUser(closerEmail);
+        
+        progress.calendly = { status: 'success', error: null };
+        console.log('[Closers] ✅ Removed from Calendly (license released)');
+      } catch (error) {
+        console.error('[Closers] ⚠️ Calendly removal failed:', error.message);
+        progress.calendly = { status: 'failed', error: error.message };
+      }
     }
 
-    // Zoom (DUMMY - won't do anything)
-    try {
-      console.log('[Closers] Step 3/5: Removing from Zoom...');
-      await zoomService.deleteUser(closerEmail, 'disassociate');
-      progress.zoom = { status: 'success', error: null };
-      console.log('[Closers] ✅ Removed from Zoom (DUMMY)');
-    } catch (error) {
-      console.error('[Closers] ⚠️ Zoom removal failed:', error.message);
-      progress.zoom = { status: 'failed', error: error.message };
+    // Zoom - REAL - Will actually delete the user!
+    if (selectedPlatforms.zoom) {
+      try {
+        console.log('[Closers] Step 3/5: Removing from Zoom...');
+        progress.zoom.status = 'pending';
+        
+        // Use email to delete (Zoom accepts email or user ID)
+        await zoomService.deleteUser(closerEmail, 'delete');
+        
+        progress.zoom = { status: 'success', error: null };
+        console.log('[Closers] ✅ Removed from Zoom (license released)');
+      } catch (error) {
+        console.error('[Closers] ⚠️ Zoom removal failed:', error.message);
+        progress.zoom = { status: 'failed', error: error.message };
+      }
     }
 
     // Twilio - REAL - Will actually release the number!
-    try {
-      console.log('[Closers] Step 4/5: Releasing 650 numbers from Twilio...');
-      
-      // Get all Twilio numbers
-      const twilioNumbers = await twilioService.getAllNumbers();
-      
-      // Find ONLY this closer's 650 numbers (matched by linkedUser ID)
-      const closerNumbers = twilioNumbers.filter(n => 
-        n.phoneNumber?.includes('650') && n.linkedUser === ghlUserId
-      );
-      
-      console.log(`[Closers] Found ${closerNumbers.length} number(s) for ${closerName}`);
-      
-      if (closerNumbers.length === 0) {
-        console.log('[Closers] No 650 numbers to release');
-        progress.twilio = { status: 'success', error: null, message: 'No numbers to release' };
-      } else {
-        // Release each number
-        for (const number of closerNumbers) {
-          console.log(`[Closers] Releasing ${number.phoneNumber} (SID: ${number.sid})...`);
-          await twilioService.releaseNumber(number.sid);
-          console.log(`[Closers] ✅ Released ${number.phoneNumber}`);
+    if (selectedPlatforms.twilio) {
+      try {
+        console.log('[Closers] Step 4/5: Releasing 650 numbers from Twilio...');
+        progress.twilio.status = 'pending';
+        
+        // Get all Twilio numbers
+        const twilioNumbers = await twilioService.getAllNumbers();
+        
+        // Find ONLY this closer's 650 numbers (matched by linkedUser ID)
+        const closerNumbers = twilioNumbers.filter(n => 
+          n.phoneNumber?.includes('650') && n.linkedUser === ghlUserId
+        );
+        
+        console.log(`[Closers] Found ${closerNumbers.length} number(s) for ${closerName}`);
+        
+        if (closerNumbers.length === 0) {
+          console.log('[Closers] No 650 numbers to release');
+          progress.twilio = { status: 'success', error: null, message: 'No numbers to release' };
+        } else {
+          // Release each number
+          for (const number of closerNumbers) {
+            console.log(`[Closers] Releasing ${number.phoneNumber} (SID: ${number.sid})...`);
+            await twilioService.releaseNumber(number.sid);
+            console.log(`[Closers] ✅ Released ${number.phoneNumber}`);
+          }
+          
+          progress.twilio = { 
+            status: 'success', 
+            error: null,
+            releasedCount: closerNumbers.length,
+            releasedNumbers: closerNumbers.map(n => n.phoneNumber)
+          };
         }
         
-        progress.twilio = { 
-          status: 'success', 
-          error: null,
-          releasedCount: closerNumbers.length,
-          releasedNumbers: closerNumbers.map(n => n.phoneNumber)
-        };
+        console.log(`[Closers] ✅ Twilio cleanup complete`);
+      } catch (error) {
+        console.error('[Closers] ❌ Twilio release failed:', error.message);
+        progress.twilio = { status: 'failed', error: error.message };
       }
-      
-      console.log(`[Closers] ✅ Twilio cleanup complete`);
-    } catch (error) {
-      console.error('[Closers] ❌ Twilio release failed:', error.message);
-      progress.twilio = { status: 'failed', error: error.message };
     }
 
     // GHL - REAL - Will actually delete the user!
-    try {
-      console.log('[Closers] Step 5/5: Removing user from GHL...');
-      console.log(`[Closers] Deleting GHL user ID: ${ghlUserId}`);
-      
-      await ghlService.deleteUser(ghlUserId);
-      
-      progress.ghl = { status: 'success', error: null };
-      console.log(`[Closers] ✅ User ${closerName} removed from GHL`);
-    } catch (error) {
-      console.error('[Closers] ❌ GHL removal failed:', error.message);
-      progress.ghl = { status: 'failed', error: error.message };
+    if (selectedPlatforms.ghl) {
+      try {
+        console.log('[Closers] Step 5/5: Removing user from GHL...');
+        progress.ghl.status = 'pending';
+        console.log(`[Closers] Deleting GHL user ID: ${ghlUserId}`);
+        
+        await ghlService.deleteUser(ghlUserId);
+        
+        progress.ghl = { status: 'success', error: null };
+        console.log(`[Closers] ✅ User ${closerName} removed from GHL`);
+      } catch (error) {
+        console.error('[Closers] ❌ GHL removal failed:', error.message);
+        progress.ghl = { status: 'failed', error: error.message };
+      }
     }
 
     console.log(`[Closers] 🎉 Offboarding complete for ${closerName}`);
-    console.log(`[Closers] Summary - Successful: ${Object.values(progress).filter(p => p.status === 'success').length}/5`);
+    
+    const successCount = Object.values(progress).filter(p => p.status === 'success').length;
+    const totalSelected = Object.values(selectedPlatforms).filter(Boolean).length;
+    
+    console.log(`[Closers] Summary - Successful: ${successCount}/${totalSelected}`);
 
     res.json({
       success: true,
@@ -351,9 +386,10 @@ router.delete('/offboard/:ghlUserId', async (req, res) => {
       closerEmail: closerEmail,
       progress,
       summary: {
-        total: 5,
-        successful: Object.values(progress).filter(p => p.status === 'success').length,
-        failed: Object.values(progress).filter(p => p.status === 'failed').length
+        total: totalSelected,
+        successful: successCount,
+        failed: Object.values(progress).filter(p => p.status === 'failed').length,
+        skipped: Object.values(progress).filter(p => p.status === 'skipped').length
       }
     });
 
@@ -363,6 +399,89 @@ router.delete('/offboard/:ghlUserId', async (req, res) => {
       error: error.message, 
       details: 'Failed to complete closer offboarding' 
     });
+  }
+});
+
+// GET /api/closers/:ghlUserId/platforms - Get platform IDs for a closer
+router.get('/:ghlUserId/platforms', async (req, res) => {
+  try {
+    const { ghlUserId } = req.params;
+    
+    console.log(`[Closers] Fetching platform IDs for user: ${ghlUserId}`);
+    
+    // Get user from GHL
+    const ghlUsers = await ghlService.getUsers();
+    const closer = ghlUsers.find(u => u.id === ghlUserId || u.ghlUserId === ghlUserId);
+    
+    if (!closer || !closer.email) {
+      return res.status(404).json({ error: 'Closer not found or no email' });
+    }
+    
+    const platforms = {
+      zoom: null,
+      calendly: null,
+      ghl: null,
+      googleWorkspace: null
+    };
+    
+    // Fetch Zoom user ID
+    try {
+      const zoomUser = await zoomService.getUserByEmail(closer.email);
+      if (zoomUser) {
+        platforms.zoom = {
+          userId: zoomUser.id,
+          email: zoomUser.email,
+          status: zoomUser.status
+        };
+      }
+    } catch (error) {
+      console.log(`[Closers] No Zoom user found for ${closer.email}`);
+    }
+    
+    // Fetch Calendly user URI
+    try {
+      const calendlyUser = await calendlyService.getUserByEmail(closer.email);
+      if (calendlyUser) {
+        platforms.calendly = {
+          uri: calendlyUser.uri,
+          email: calendlyUser.email,
+          name: calendlyUser.name,
+          role: calendlyUser.role
+        };
+      }
+    } catch (error) {
+      console.log(`[Closers] No Calendly user found for ${closer.email}`);
+    }
+    
+    // Fetch Google Workspace user ID
+    try {
+      const googleUser = await googleWorkspaceService.getAccount(closer.email);
+      if (googleUser && googleUser.id) {
+        platforms.googleWorkspace = {
+          userId: googleUser.id,
+          email: googleUser.primaryEmail || closer.email,
+          name: googleUser.name?.fullName
+        };
+      }
+    } catch (error) {
+      console.log(`[Closers] No Google Workspace user found for ${closer.email}`);
+    }
+    
+    // Add GHL user ID (we already have it from the closer object)
+    platforms.ghl = {
+      userId: closer.id,
+      email: closer.email,
+      name: closer.name
+    };
+    
+    res.json({
+      success: true,
+      platforms
+    });
+    
+  } catch (error) {
+    console.error('[Closers] Error fetching platform IDs:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

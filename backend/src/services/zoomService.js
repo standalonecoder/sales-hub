@@ -3,142 +3,175 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// ⚠️ PLACEHOLDER SERVICE - Replace with real Zoom API implementation
-// Documentation: https://developers.zoom.us/docs/api/
-
 class ZoomService {
   constructor() {
-    // TODO: Add real Zoom credentials
-    // Option 1: JWT App (deprecated but simpler)
-    // Option 2: OAuth 2.0 Server-to-Server (recommended)
-    this.accountId = process.env.ZOOM_ACCOUNT_ID || 'dummy_account';
-    this.clientId = process.env.ZOOM_CLIENT_ID || 'dummy_client_id';
-    this.clientSecret = process.env.ZOOM_CLIENT_SECRET || 'dummy_secret';
-    
+    this.accountId = process.env.ZOOM_ACCOUNT_ID;
+    this.clientId = process.env.ZOOM_CLIENT_ID;
+    this.clientSecret = process.env.ZOOM_CLIENT_SECRET;
     this.baseURL = 'https://api.zoom.us/v2';
+    this.tokenCache = null;
+    this.tokenExpiry = null;
   }
 
-  // Get OAuth access token (for Server-to-Server OAuth)
+  // Get OAuth access token (Server-to-Server OAuth)
   async getAccessToken() {
     try {
-      // TODO: Implement real OAuth token fetch
-      // const response = await axios.post('https://zoom.us/oauth/token', null, {
-      //   params: {
-      //     grant_type: 'account_credentials',
-      //     account_id: this.accountId
-      //   },
-      //   auth: {
-      //     username: this.clientId,
-      //     password: this.clientSecret
-      //   }
-      // });
-      // return response.data.access_token;
+      // Return cached token if still valid
+      if (this.tokenCache && this.tokenExpiry && Date.now() < this.tokenExpiry) {
+        return this.tokenCache;
+      }
 
-      return 'dummy_access_token';
+      console.log('[Zoom] Fetching new access token...');
+      
+      const response = await axios.post(
+        'https://zoom.us/oauth/token',
+        null,
+        {
+          params: {
+            grant_type: 'account_credentials',
+            account_id: this.accountId
+          },
+          auth: {
+            username: this.clientId,
+            password: this.clientSecret
+          }
+        }
+      );
+
+      this.tokenCache = response.data.access_token;
+      this.tokenExpiry = Date.now() + (response.data.expires_in * 1000) - 60000; // Refresh 1min before expiry
+
+      console.log('[Zoom] ✅ Access token obtained');
+      return this.tokenCache;
     } catch (error) {
-      console.error('[Zoom] Error getting access token:', error.message);
-      throw error;
+      console.error('[Zoom] Error getting access token:', error.response?.data || error.message);
+      throw new Error('Failed to authenticate with Zoom');
+    }
+  }
+
+  // Get user by email
+  async getUserByEmail(email) {
+    try {
+      console.log(`[Zoom] Fetching user by email: ${email}`);
+      const token = await this.getAccessToken();
+      
+      const response = await axios.get(
+        `${this.baseURL}/users/${email}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+
+      console.log(`[Zoom] ✅ Found user: ${response.data.id}`);
+      return {
+        id: response.data.id,
+        email: response.data.email,
+        firstName: response.data.first_name,
+        lastName: response.data.last_name,
+        type: response.data.type,
+        status: response.data.status
+      };
+    } catch (error) {
+      if (error.response?.status === 404) {
+        console.log(`[Zoom] User not found: ${email}`);
+        return null;
+      }
+      console.error('[Zoom] Error fetching user:', error.response?.data || error.message);
+      throw new Error(`Failed to fetch Zoom user: ${error.message}`);
     }
   }
 
   // Create a new Zoom user
   async createUser(firstName, lastName, email) {
     try {
-      console.log(`[Zoom] 🚧 DUMMY: Creating user ${email}`);
+      console.log(`[Zoom] Creating user: ${email}`);
+      const token = await this.getAccessToken();
       
-      // TODO: Implement real Zoom user creation
-      // const token = await this.getAccessToken();
-      // const response = await axios.post(
-      //   `${this.baseURL}/users`,
-      //   {
-      //     action: 'create',
-      //     user_info: {
-      //       email: email,
-      //       type: 2, // Licensed user (type 2) - requires available license
-      //       first_name: firstName,
-      //       last_name: lastName
-      //     }
-      //   },
-      //   {
-      //     headers: {
-      //       'Authorization': `Bearer ${token}`,
-      //       'Content-Type': 'application/json'
-      //     }
-      //   }
-      // );
+      const response = await axios.post(
+        `${this.baseURL}/users`,
+        {
+          action: 'create',
+          user_info: {
+            email: email,
+            type: 2, // Licensed user
+            first_name: firstName,
+            last_name: lastName
+          }
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
 
-      // DUMMY RESPONSE
-      const dummyUser = {
-        id: `zoom_${Date.now()}`,
-        email: email,
-        firstName: firstName,
-        lastName: lastName,
-        type: 2,
-        status: 'active'
-      };
-
-      console.log(`[Zoom] ✅ DUMMY: User created`, dummyUser);
+      console.log(`[Zoom] ✅ User created: ${response.data.id}`);
       
       return {
         success: true,
-        userId: dummyUser.id,
-        email: dummyUser.email,
-        message: '⚠️ DUMMY MODE: Zoom user creation simulated (replace with real API)'
+        userId: response.data.id,
+        email: response.data.email
       };
     } catch (error) {
-      console.error('[Zoom] Error creating user:', error.message);
-      throw new Error(`Failed to create Zoom user: ${error.message}`);
+      console.error('[Zoom] Error creating user:', error.response?.data || error.message);
+      throw new Error(`Failed to create Zoom user: ${error.response?.data?.message || error.message}`);
     }
   }
 
-  // Delete/Deactivate a Zoom user
-  async deleteUser(userId, action = 'disassociate') {
+  // Delete Zoom user permanently
+  async deleteUser(userIdOrEmail, action = 'delete') {
     try {
-      console.log(`[Zoom] 🚧 DUMMY: Deleting user ${userId} with action: ${action}`);
+      console.log(`[Zoom] Deleting user: ${userIdOrEmail} (action: ${action})`);
+      const token = await this.getAccessToken();
       
-      // TODO: Implement real user deletion
-      // Actions: 'disassociate' (removes from account), 'delete' (permanent)
-      // const token = await this.getAccessToken();
-      // await axios.delete(
-      //   `${this.baseURL}/users/${userId}`,
-      //   {
-      //     params: { action: action },
-      //     headers: { 'Authorization': `Bearer ${token}` }
-      //   }
-      // );
+      await axios.delete(
+        `${this.baseURL}/users/${userIdOrEmail}`,
+        {
+          params: { action: action },
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
 
-      console.log(`[Zoom] ✅ DUMMY: User ${action}d successfully`);
+      console.log(`[Zoom] ✅ User deleted successfully`);
       
       return {
         success: true,
-        message: `⚠️ DUMMY MODE: Zoom user ${action} simulated (replace with real API)`
+        message: 'User deleted from Zoom'
       };
     } catch (error) {
-      console.error('[Zoom] Error deleting user:', error.message);
-      throw new Error(`Failed to delete Zoom user: ${error.message}`);
+      console.error('[Zoom] Error deleting user:', error.response?.data || error.message);
+      throw new Error(`Failed to delete Zoom user: ${error.response?.data?.message || error.message}`);
     }
   }
 
-  // Get user details
+  // Get user details by ID
   async getUser(userId) {
     try {
-      console.log(`[Zoom] 🚧 DUMMY: Getting user ${userId}`);
+      console.log(`[Zoom] Fetching user: ${userId}`);
+      const token = await this.getAccessToken();
       
-      // TODO: Implement real user fetch
-      // const token = await this.getAccessToken();
-      // const response = await axios.get(
-      //   `${this.baseURL}/users/${userId}`,
-      //   { headers: { 'Authorization': `Bearer ${token}` } }
-      // );
+      const response = await axios.get(
+        `${this.baseURL}/users/${userId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
 
       return {
         success: true,
-        userId: userId,
-        status: 'active',
-        message: '⚠️ DUMMY MODE: User fetch simulated'
+        userId: response.data.id,
+        email: response.data.email,
+        status: response.data.status
       };
     } catch (error) {
-      console.error('[Zoom] Error getting user:', error.message);
+      console.error('[Zoom] Error getting user:', error.response?.data || error.message);
       throw new Error(`Failed to get Zoom user: ${error.message}`);
     }
   }

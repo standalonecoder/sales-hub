@@ -64,7 +64,8 @@ export const analyticsApi = {
 export const closersApi = {
   getClosers: () => api.get('/closers'),  // Gets all @tjr-trades.com users from GHL
   onboardCloser: (data) => api.post('/closers/onboard', data),
-  offboardCloser: (ghlUserId) => api.delete(`/closers/offboard/${ghlUserId}`),
+  offboardCloser: (ghlUserId, platforms) => api.delete(`/closers/offboard/${ghlUserId}`, { data: { platforms } }),
+  getPlatforms: (ghlUserId) => api.get(`/closers/${ghlUserId}/platforms`),
 };
 
 // Calendly API

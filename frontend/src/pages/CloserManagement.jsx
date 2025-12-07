@@ -16,6 +16,23 @@ import {
 export default function CloserManagement() {
   const queryClient = useQueryClient();
   const [showOnboardForm, setShowOnboardForm] = useState(false);
+  const [showOffboardModal, setShowOffboardModal] = useState(false);
+  const [selectedCloser, setSelectedCloser] = useState(null);
+  const [platformIds, setPlatformIds] = useState({ zoom: null, calendly: null, ghl: null, googleWorkspace: null });
+  const [loadingStages, setLoadingStages] = useState({
+    twilio: false,
+    googleWorkspace: false,
+    calendly: false,
+    zoom: false,
+    ghl: false
+  });
+  const [selectedPlatforms, setSelectedPlatforms] = useState({
+    googleWorkspace: true,
+    calendly: true,
+    zoom: true,
+    twilio: true,
+    ghl: true
+  });
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -48,9 +65,11 @@ export default function CloserManagement() {
 
   // Offboard mutation
   const offboardMutation = useMutation({
-    mutationFn: (id) => closersApi.offboardCloser(id),
+    mutationFn: ({ closerId, platforms }) => closersApi.offboardCloser(closerId, platforms),
     onSuccess: () => {
       queryClient.invalidateQueries(['closers']);
+      setShowOffboardModal(false);
+      setSelectedCloser(null);
     }
   });
 
@@ -60,10 +79,106 @@ export default function CloserManagement() {
   };
 
   const handleOffboard = (closer) => {
-    const closerName = `${closer.firstName || ''} ${closer.lastName || ''}`.trim() || 'this closer';
-    if (window.confirm(`Are you sure you want to offboard ${closerName}? This will remove them from all systems.`)) {
-      offboardMutation.mutate(closer.id);
+    setSelectedCloser(closer);
+    setSelectedPlatforms({
+      googleWorkspace: true,
+      calendly: true,
+      zoom: true,
+      twilio: true,
+      ghl: true
+    });
+    
+    // Reset states
+    setPlatformIds({ zoom: null, calendly: null, ghl: null, googleWorkspace: null });
+    setLoadingStages({
+      twilio: false,
+      googleWorkspace: false,
+      calendly: false,
+      zoom: false,
+      ghl: false
+    });
+    
+    setShowOffboardModal(true);
+    
+    // Sequential loading animation
+    const loadSequentially = async () => {
+      // Stage 1: Twilio (1.5s)
+      setLoadingStages(prev => ({ ...prev, twilio: true }));
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      setLoadingStages(prev => ({ ...prev, twilio: false }));
+      
+      // Stage 2: Google Workspace (1.5s)
+      setLoadingStages(prev => ({ ...prev, googleWorkspace: true }));
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      setLoadingStages(prev => ({ ...prev, googleWorkspace: false }));
+      
+      // Stage 3: Calendly (1.5s)
+      setLoadingStages(prev => ({ ...prev, calendly: true }));
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      setLoadingStages(prev => ({ ...prev, calendly: false }));
+      
+      // Stage 4: Zoom (fetch real data)
+      setLoadingStages(prev => ({ ...prev, zoom: true }));
+      try {
+        const response = await closersApi.getPlatforms(closer.id);
+        setPlatformIds(response.data.platforms);
+      } catch (error) {
+        console.error('Error fetching platform IDs:', error);
+        setPlatformIds({ zoom: null, calendly: null });
+      }
+      await new Promise(resolve => setTimeout(resolve, 500));
+      setLoadingStages(prev => ({ ...prev, zoom: false }));
+      
+      // Stage 5: GHL (1.5s)
+      setLoadingStages(prev => ({ ...prev, ghl: true }));
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      setLoadingStages(prev => ({ ...prev, ghl: false }));
+    };
+    
+    loadSequentially();
+  };
+
+  const handleConfirmOffboard = () => {
+    if (!selectedCloser) return;
+    
+    // Check if at least one platform is selected
+    const hasSelection = Object.values(selectedPlatforms).some(v => v);
+    if (!hasSelection) {
+      alert('Please select at least one platform to offboard from');
+      return;
     }
+
+    offboardMutation.mutate({
+      closerId: selectedCloser.id,
+      platforms: selectedPlatforms
+    });
+  };
+
+  const togglePlatform = (platform) => {
+    setSelectedPlatforms(prev => ({
+      ...prev,
+      [platform]: !prev[platform]
+    }));
+  };
+
+  const selectAllPlatforms = () => {
+    setSelectedPlatforms({
+      googleWorkspace: true,
+      calendly: true,
+      zoom: true,
+      twilio: true,
+      ghl: true
+    });
+  };
+
+  const deselectAllPlatforms = () => {
+    setSelectedPlatforms({
+      googleWorkspace: false,
+      calendly: false,
+      zoom: false,
+      twilio: false,
+      ghl: false
+    });
   };
 
   return (
@@ -369,6 +484,290 @@ export default function CloserManagement() {
           </div>
         )}
       </div>
+
+      {/* Offboard Confirmation Modal */}
+      <AnimatePresence>
+        {showOffboardModal && selectedCloser && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={() => setShowOffboardModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-hidden flex flex-col"
+            >
+              {/* Header */}
+              <div className="bg-gradient-to-r from-red-500 to-red-600 px-6 py-5">
+                <div className="flex items-center gap-3">
+                  <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center">
+                    <AlertCircle className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-white">Offboard Closer</h3>
+                    <p className="text-red-100 text-sm mt-0.5">
+                      {selectedCloser.firstName} {selectedCloser.lastName}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="p-4 overflow-y-auto flex-1">
+                <p className="text-gray-600 text-sm mb-3">
+                  Select which platforms to remove this closer from. This action cannot be undone.
+                </p>
+
+                {/* Platform Checkboxes */}
+                <div className="space-y-2 mb-4">
+                  {/* Google Workspace */}
+                  <label className="flex items-center gap-2.5 p-3 rounded-lg border-2 border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 cursor-pointer transition-all">
+                    <input
+                      type="checkbox"
+                      checked={selectedPlatforms.googleWorkspace}
+                      onChange={() => togglePlatform('googleWorkspace')}
+                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <div className="flex items-center gap-2.5 flex-1">
+                      <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
+                        <Mail className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">Google Workspace</p>
+                        <p className="text-xs text-gray-500">Email account & workspace access</p>
+                        {loadingStages.googleWorkspace ? (
+                          <div className="flex items-center gap-2 mt-1">
+                            <Loader2 className="h-3 w-3 animate-spin text-blue-600" />
+                            <p className="text-xs text-gray-500">Checking workspace...</p>
+                          </div>
+                        ) : platformIds.googleWorkspace ? (
+                          <>
+                            <p className="text-xs text-gray-700 mt-1">
+                              <span className="font-medium">Workspace ID:</span> <span className="font-mono text-blue-600">{platformIds.googleWorkspace.userId}</span>
+                            </p>
+                            <p className="text-xs text-amber-600 mt-0.5">
+                              ⚠️ Deleting will free up 1 license for new user
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-xs text-gray-400 mt-1">Not connected to Google Workspace</p>
+                        )}
+                      </div>
+                    </div>
+                  </label>
+
+                  {/* Calendly */}
+                  <label className="flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 cursor-pointer transition-all">
+                    <input
+                      type="checkbox"
+                      checked={selectedPlatforms.calendly}
+                      onChange={() => togglePlatform('calendly')}
+                      className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center">
+                        <svg className="h-5 w-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                        </svg>
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">Calendly</p>
+                        <p className="text-xs text-gray-500">Scheduling & calendar integration</p>
+                        {loadingStages.calendly ? (
+                          <div className="flex items-center gap-2 mt-1">
+                            <Loader2 className="h-3 w-3 animate-spin text-green-600" />
+                            <p className="text-xs text-gray-500">Checking calendar...</p>
+                          </div>
+                        ) : platformIds.calendly ? (
+                          <>
+                            <p className="text-xs text-gray-700 mt-1">
+                              <span className="font-medium">Calendly ID:</span> <span className="font-mono text-green-600">{platformIds.calendly.uri.split('/').pop()}</span>
+                            </p>
+                            <p className="text-xs text-amber-600 mt-0.5">
+                              ⚠️ Deleting will free up 1 license for new user
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-xs text-gray-400 mt-1">Not connected to Calendly</p>
+                        )}
+                      </div>
+                    </div>
+                  </label>
+
+                  {/* Zoom */}
+                  <label className="flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 cursor-pointer transition-all">
+                    <input
+                      type="checkbox"
+                      checked={selectedPlatforms.zoom}
+                      onChange={() => togglePlatform('zoom')}
+                      className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center">
+                        <svg className="h-5 w-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M19 4h-1V3c0-.55-.45-1-1-1s-1 .45-1 1v1H8V3c0-.55-.45-1-1-1s-1 .45-1 1v1H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V9h14v11zM7 11h5v5H7z"/>
+                        </svg>
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">Zoom</p>
+                        <p className="text-xs text-gray-500">Video conferencing account</p>
+                        {loadingStages.zoom ? (
+                          <div className="flex items-center gap-2 mt-1">
+                            <Loader2 className="h-3 w-3 animate-spin text-indigo-600" />
+                            <p className="text-xs text-gray-500">Checking Zoom account...</p>
+                          </div>
+                        ) : platformIds.zoom ? (
+                          <>
+                            <p className="text-xs text-gray-700 mt-1">
+                              <span className="font-medium">Zoom ID:</span> <span className="font-mono text-indigo-600">{platformIds.zoom.userId}</span>
+                            </p>
+                            <p className="text-xs text-amber-600 mt-0.5">
+                              ⚠️ Deleting will free up 1 license for new user
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-xs text-gray-400 mt-1">Not connected to Zoom</p>
+                        )}
+                      </div>
+                    </div>
+                  </label>
+
+                  {/* Twilio */}
+                  <label className="flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 cursor-pointer transition-all">
+                    <input
+                      type="checkbox"
+                      checked={selectedPlatforms.twilio}
+                      onChange={() => togglePlatform('twilio')}
+                      className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center">
+                        <Phone className="h-5 w-5 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">Twilio (650 Number)</p>
+                        {loadingStages.twilio ? (
+                          <div className="flex items-center gap-2 mt-1">
+                            <Loader2 className="h-3 w-3 animate-spin text-red-600" />
+                            <p className="text-xs text-gray-500">Loading phone number...</p>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-500">
+                            {selectedCloser.assignedPhoneNumber || 'No number assigned'}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </label>
+
+                  {/* GHL */}
+                  <label className="flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 cursor-pointer transition-all">
+                    <input
+                      type="checkbox"
+                      checked={selectedPlatforms.ghl}
+                      onChange={() => togglePlatform('ghl')}
+                      className="h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center">
+                        <Briefcase className="h-5 w-5 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900">GoHighLevel</p>
+                        <p className="text-xs text-gray-500">CRM & user account</p>
+                        {loadingStages.ghl ? (
+                          <div className="flex items-center gap-2 mt-1">
+                            <Loader2 className="h-3 w-3 animate-spin text-purple-600" />
+                            <p className="text-xs text-gray-500">Checking CRM...</p>
+                          </div>
+                        ) : platformIds.ghl ? (
+                          <>
+                            <p className="text-xs text-gray-700 mt-1">
+                              <span className="font-medium">GHL ID:</span> <span className="font-mono text-purple-600">{platformIds.ghl.userId}</span>
+                            </p>
+                            <p className="text-xs text-amber-600 mt-0.5">
+                              ⚠️ Deleting will free up 1 license for new user
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-xs text-gray-400 mt-1">Not connected to GHL</p>
+                        )}
+                      </div>
+                    </div>
+                  </label>
+                </div>
+
+                {/* Quick Actions */}
+                <div className="flex items-center gap-2 mb-3">
+                  <button
+                    onClick={selectAllPlatforms}
+                    className="text-xs font-medium text-blue-600 hover:text-blue-700 px-2.5 py-1 rounded-lg hover:bg-blue-50 transition-colors"
+                  >
+                    Select All
+                  </button>
+                  <button
+                    onClick={deselectAllPlatforms}
+                    className="text-xs font-medium text-gray-600 hover:text-gray-700 px-2.5 py-1 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    Deselect All
+                  </button>
+                </div>
+
+                {/* Warning Message */}
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                  <div className="flex gap-2.5">
+                    <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-semibold text-red-900 mb-0.5">Warning</p>
+                      <p className="text-xs text-red-700">
+                        This action is permanent and cannot be undone. The closer will lose access to all selected platforms immediately.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-2.5">
+                  <button
+                    onClick={() => setShowOffboardModal(false)}
+                    disabled={offboardMutation.isPending}
+                    className="flex-1 px-3 py-2.5 border-2 border-gray-300 text-gray-700 font-semibold text-sm rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleConfirmOffboard}
+                    disabled={offboardMutation.isPending || loadingStages.twilio || loadingStages.googleWorkspace || loadingStages.calendly || loadingStages.zoom || loadingStages.ghl}
+                    className="flex-1 px-3 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white font-semibold text-sm rounded-lg hover:from-red-600 hover:to-red-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {offboardMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        <span>Removing...</span>
+                      </>
+                    ) : loadingStages.twilio || loadingStages.googleWorkspace || loadingStages.calendly || loadingStages.zoom || loadingStages.ghl ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        <span>Loading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <UserMinus className="h-5 w-5" />
+                        <span>Confirm Offboard</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

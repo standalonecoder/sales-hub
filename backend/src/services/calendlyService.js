@@ -114,3 +114,82 @@ export async function getOrganizationMembers() {
     throw error;
   }
 }
+
+// Get user by email
+export async function getUserByEmail(email) {
+  try {
+    console.log(`[Calendly] Searching for user: ${email}`);
+    const members = await getOrganizationMembers();
+    
+    // Find member by email
+    const member = members.find(m => m.user?.email?.toLowerCase() === email.toLowerCase());
+    
+    if (!member) {
+      console.log(`[Calendly] User not found: ${email}`);
+      return null;
+    }
+    
+    console.log(`[Calendly] ✅ Found user: ${member.user.uri}`);
+    return {
+      uri: member.user.uri,
+      email: member.user.email,
+      name: member.user.name,
+      role: member.role
+    };
+  } catch (error) {
+    console.error('[Calendly] Error finding user:', error.response?.data || error.message);
+    throw error;
+  }
+}
+
+// Invite user to organization
+export async function inviteUser(email, firstName, lastName) {
+  try {
+    console.log(`[Calendly] Inviting user: ${email}`);
+    const user = await getCurrentUser();
+    
+    const response = await calendlyClient.post('/organization_invitations', {
+      email: email,
+      organization: user.current_organization
+    });
+    
+    console.log(`[Calendly] ✅ Invitation sent to ${email}`);
+    return {
+      success: true,
+      email: email,
+      invitationUri: response.data.resource.uri
+    };
+  } catch (error) {
+    console.error('[Calendly] Error inviting user:', error.response?.data || error.message);
+    throw new Error(`Failed to invite Calendly user: ${error.response?.data?.message || error.message}`);
+  }
+}
+
+// Remove user from organization
+export async function removeUser(email) {
+  try {
+    console.log(`[Calendly] Removing user: ${email}`);
+    
+    // First, find the user
+    const members = await getOrganizationMembers();
+    const member = members.find(m => m.user?.email?.toLowerCase() === email.toLowerCase());
+    
+    if (!member) {
+      console.log(`[Calendly] User not found: ${email}`);
+      return { success: true, message: 'User not found in Calendly' };
+    }
+    
+    // Remove the organization membership
+    const membershipUri = member.uri.replace('https://api.calendly.com', '');
+    await calendlyClient.delete(membershipUri);
+    
+    console.log(`[Calendly] ✅ User removed: ${email}`);
+    return {
+      success: true,
+      message: 'User removed from Calendly'
+    };
+  } catch (error) {
+    console.error('[Calendly] Error removing user:', error.response?.data || error.message);
+    throw new Error(`Failed to remove Calendly user: ${error.response?.data?.message || error.message}`);
+  }
+}
