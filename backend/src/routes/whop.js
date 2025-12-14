@@ -49,7 +49,14 @@ router.get('/closer-links/:email', async (req, res) => {
     const { email } = req.params;
     console.log(`[Whop API] Fetching links for closer: ${email}`);
 
-    const links = await whopService.getLinksForCloser(email);
+    // Add timeout wrapper to prevent hanging
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Request timeout after 25 seconds')), 25000)
+    );
+    
+    const linksPromise = whopService.getLinksForCloser(email);
+    
+    const links = await Promise.race([linksPromise, timeoutPromise]);
 
     res.json({
       success: true,

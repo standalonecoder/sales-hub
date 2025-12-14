@@ -21,6 +21,7 @@ const PRODUCT_DISPLAY_NAMES = {
 
 const whopClient = axios.create({
   baseURL: WHOP_BASE_URL,
+  timeout: 30000, // 30 second timeout
   headers: {
     'Authorization': `Bearer ${WHOP_API_KEY}`,
     'Content-Type': 'application/json'
@@ -320,13 +321,35 @@ export async function getCloserLinksGrouped() {
   }
 }
 
-// Get links for a specific closer
+// Get links for a specific closer (FAST - priority products only)
 export async function getLinksForCloser(closerEmail) {
   try {
-    const allLinks = await getAllCloserLinks();
-    return allLinks.filter(link =>
+    console.log(`[Whop] Fetching links for ${closerEmail} from priority products only...`);
+    
+    const priorityIds = Object.values(PRIORITY_PRODUCTS);
+    const allLinks = [];
+
+    // Only fetch from Blueprint+ and Deposit Payment Links
+    for (let i = 0; i < priorityIds.length; i++) {
+      const productId = priorityIds[i];
+      const productName = PRODUCT_DISPLAY_NAMES[productId] || productId;
+      
+      console.log(`[Whop] Fetching from ${productName}...`);
+      const links = await getCloserLinksForProduct(productId, productName);
+      allLinks.push(...links);
+
+      if (i < priorityIds.length - 1) {
+        await delay(500);
+      }
+    }
+
+    // Filter for this specific closer
+    const closerLinks = allLinks.filter(link =>
       link.closerEmail.toLowerCase() === closerEmail.toLowerCase()
     );
+
+    console.log(`[Whop] Found ${closerLinks.length} links for ${closerEmail}`);
+    return closerLinks;
   } catch (error) {
     console.error('[Whop] Error fetching links for closer:', error.message);
     throw error;
