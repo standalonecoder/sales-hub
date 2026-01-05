@@ -89,4 +89,10 @@ export const calendlyApi = {
   getHealth: () => api.get('/calendly/health')
 };
 
+// Sales API
+export const salesApi = {
+  getOverview: (days = 30) => api.get(`/sales/overview?days=${days}`),
+  getTopClosers: (days = 30, limit = 10) => api.get(`/sales/top-closers?days=${days}&limit=${limit}`)
+};
+
 export default api;

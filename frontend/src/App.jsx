@@ -10,6 +10,7 @@ import CloserManagement from './pages/CloserManagement';
 import SystemStatus from './pages/Systemstatus';
 import CloserOnboarding from './pages/CloserOnboarding';
 import CallsManagement from './pages/CallsManagement';
+import SalesAnalytics from './pages/SalesAnalytics';
 
 // Placeholder pages for new routes
 const TeamManagement = () => <CloserManagement />;
@@ -35,6 +36,7 @@ function App() {
           {/* Analytics & Reports */}
           <Route path="analytics" element={<AnalyticsReports />} />
           <Route path="calls-analytics" element={<CallsManagement />} />
+          <Route path="sales" element={<SalesAnalytics />} />
           
           {/* System Status */}
           <Route path="system-status" element={<SystemStatus />} />

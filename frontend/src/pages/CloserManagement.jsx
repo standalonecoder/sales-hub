@@ -435,9 +435,24 @@ export default function CloserManagement() {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            <Settings className="h-4 w-4" />
-            <span className="hidden sm:inline">Manage Closers</span>
-            <span className="sm:hidden">Closers</span>
+            <UserPlus className="h-4 w-4" />
+            <span className="hidden sm:inline">Onboarding</span>
+            <span className="sm:hidden">Onboard</span>
+            <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-xs">
+              {closers.length}
+            </span>
+          </button>
+          <button
+            onClick={() => setActiveTab('offboarding')}
+            className={`flex items-center gap-2 px-3 sm:px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'offboarding'
+                ? 'border-red-600 text-red-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <UserMinus className="h-4 w-4" />
+            <span className="hidden sm:inline">Offboarding</span>
+            <span className="sm:hidden">Offboard</span>
             <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-xs">
               {closers.length}
             </span>
@@ -752,25 +767,6 @@ export default function CloserManagement() {
                   {/* Divider */}
                   <div className="border-t border-gray-200 my-4"></div>
 
-                  {/* Offboard Button - Full Width at Bottom */}
-                  <button
-                    onClick={() => handleOffboard(closer)}
-                    disabled={offboardMutation.isPending}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium text-red-600 hover:text-white hover:bg-red-600 border border-red-300 hover:border-red-600 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {offboardMutation.isPending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span>Removing...</span>
-                      </>
-                    ) : (
-                      <>
-                        <UserMinus className="h-4 w-4" />
-                        <span>Offboard Closer</span>
-                      </>
-                    )}
-                  </button>
-
                   {/* Joined Date - Footer */}
                   {closer.createdAt && (
                     <div className="mt-3 pt-3 border-t border-gray-100">
@@ -790,6 +786,196 @@ export default function CloserManagement() {
         )}
         </div>
       </div>
+      )}
+
+      {/* ========== OFFBOARDING TAB ========== */}
+      {activeTab === 'offboarding' && (
+        <div className="space-y-6">
+          {/* Warning Banner - Improved */}
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-200 rounded-2xl p-6 shadow-sm"
+          >
+            <div className="flex items-start gap-4">
+              <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="h-5 w-5 text-red-600" />
+              </div>
+              <div>
+                <p className="text-base font-bold text-red-900 mb-2">
+                  ⚠️ Offboarding Closer
+                </p>
+                <p className="text-sm text-red-800 leading-relaxed">
+                  Select a closer below to remove them from all platforms. This will delete their accounts and release their phone number.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Stats Overview - Improved */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl border-2 border-green-200 p-6 shadow-sm"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-green-700 uppercase tracking-wide mb-1">Active Closers</p>
+                  <p className="text-4xl font-bold text-green-900 mt-2">{closers.length}</p>
+                  <p className="text-xs text-green-600 mt-2">Total team members</p>
+                </div>
+                <div className="h-14 w-14 rounded-2xl bg-green-500 flex items-center justify-center shadow-lg">
+                  <Briefcase className="h-7 w-7 text-white" strokeWidth={2.5} />
+                </div>
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl border-2 border-blue-200 p-6 shadow-sm"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-blue-700 uppercase tracking-wide mb-1">With 650 Numbers</p>
+                  <p className="text-4xl font-bold text-blue-900 mt-2">{closersWithNumbers.length}</p>
+                  <p className="text-xs text-blue-600 mt-2">Numbers assigned</p>
+                </div>
+                <div className="h-14 w-14 rounded-2xl bg-blue-500 flex items-center justify-center shadow-lg">
+                  <Phone className="h-7 w-7 text-white" strokeWidth={2.5} />
+                </div>
+              </div>
+            </motion.div>
+          </div>
+
+          {/* Closers List for Offboarding - Improved */}
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-16">
+              <Loader2 className="h-12 w-12 animate-spin text-red-500 mb-4" />
+              <p className="text-gray-600 font-medium">Loading closers...</p>
+            </div>
+          ) : closers.length === 0 ? (
+            <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl border-2 border-gray-200">
+              <div className="h-16 w-16 rounded-full bg-gray-200 flex items-center justify-center mx-auto mb-4">
+                <Users className="h-8 w-8 text-gray-400" />
+              </div>
+              <p className="text-gray-700 font-semibold text-lg">No Closers Available</p>
+              <p className="text-sm text-gray-500 mt-2">All closers have been offboarded</p>
+            </div>
+          ) : (
+            <div>
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-lg font-bold text-gray-900">Select Closer to Offboard</h3>
+                <span className="text-sm text-gray-500">{closers.length} total</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {closers.map((closer, index) => (
+                  <motion.div
+                    key={closer.id}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="group bg-white rounded-2xl border-2 border-gray-200 p-6 hover:border-gray-400 hover:shadow-xl transition-all duration-300"
+                  >
+                    {/* Avatar and Name */}
+                    <div className="flex flex-col items-center text-center mb-5">
+                      <div className="relative mb-3">
+                        <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center text-white font-bold text-2xl shadow-lg group-hover:scale-110 transition-transform">
+                          {closer.firstName?.charAt(0) || '?'}{closer.lastName?.charAt(0) || ''}
+                        </div>
+                        <div className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-green-500 border-2 border-white flex items-center justify-center">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-white" />
+                        </div>
+                      </div>
+                      <h3 className="font-bold text-gray-900 text-base mb-1">
+                        {closer.firstName} {closer.lastName}
+                      </h3>
+                      <div className="flex items-center gap-1.5 text-xs text-gray-500 bg-gray-50 px-3 py-1.5 rounded-full">
+                        <Mail className="h-3 w-3 flex-shrink-0" />
+                        <span className="truncate max-w-[200px]">{closer.email}</span>
+                      </div>
+                    </div>
+
+                    {/* Divider */}
+                    <div className="border-t border-gray-200 my-4"></div>
+
+                    {/* Info Grid - Improved */}
+                    <div className="space-y-3">
+                      {/* GHL Status */}
+                      <div className="flex items-center justify-between bg-green-50 rounded-lg px-3 py-2">
+                        <span className="text-xs font-semibold text-green-700 uppercase">GHL Status</span>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-green-100 text-green-800 text-xs font-bold rounded-full">
+                          <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
+                          Active
+                        </span>
+                      </div>
+
+                      {/* Phone Number */}
+                      <div className="flex items-center justify-between bg-blue-50 rounded-lg px-3 py-2">
+                        <span className="text-xs font-semibold text-blue-700 uppercase">Phone Number</span>
+                        {closer.assignedPhoneNumber ? (
+                          <span className="text-sm font-mono text-blue-900 font-bold">
+                            {closer.assignedPhoneNumber}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400 italic">
+                            No number
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Role */}
+                      {closer.role && (
+                        <div className="flex items-center justify-between bg-purple-50 rounded-lg px-3 py-2">
+                          <span className="text-xs font-semibold text-purple-700 uppercase">Role</span>
+                          <span className="text-sm text-purple-900 capitalize font-medium">{closer.role}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Divider */}
+                    <div className="border-t border-gray-200 my-4"></div>
+
+                    {/* Offboard Button - Enhanced */}
+                    <button
+                      onClick={() => handleOffboard(closer)}
+                      disabled={offboardMutation.isPending}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-white bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 rounded-xl shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed group-hover:scale-105"
+                    >
+                      {offboardMutation.isPending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span>Removing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <UserMinus className="h-4 w-4" />
+                          <span>Offboard Closer</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* Joined Date - Footer */}
+                    {closer.createdAt && (
+                      <div className="mt-4 pt-3 border-t border-gray-100">
+                        <p className="text-xs text-gray-400 text-center flex items-center justify-center gap-1">
+                          <span className="font-medium">Joined</span>
+                          <span>{new Date(closer.createdAt).toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric',
+                            year: 'numeric'
+                          })}</span>
+                        </p>
+                      </div>
+                    )}
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* ========== PAYMENT LINKS TAB ========== */}

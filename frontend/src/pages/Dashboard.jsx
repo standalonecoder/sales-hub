@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { numbersApi, ghlApi, closersApi } from '../services/api';
+import { numbersApi, ghlApi, closersApi, salesApi } from '../services/api';
 import { 
   UserPlus, 
   ShoppingCart, 
@@ -18,7 +18,9 @@ import {
   ChevronUp,
   AlertTriangle,
   Info,
-  Calendar
+  Calendar,
+  DollarSign,
+  TrendingUp
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -181,6 +183,21 @@ export default function Dashboard() {
             </div>
             <h3 className="text-xl font-bold text-gray-900 mb-2">Calls Analytics</h3>
             <p className="text-gray-600">View today's scheduled calls & capacity</p>
+          </Link>
+
+          {/* Sales & Revenue Card - LINK TO SALES PAGE */}
+          <Link
+            to="/sales"
+            className="group relative bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl border-2 border-green-200 p-10 hover:border-green-600 hover:shadow-xl transition-all duration-300"
+          >
+            <div className="absolute top-8 right-8">
+              <ArrowRight className="h-6 w-6 text-green-600 group-hover:translate-x-1 transition-all" />
+            </div>
+            <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-green-600 to-emerald-600 flex items-center justify-center mb-8 group-hover:scale-110 transition-transform shadow-lg">
+              <DollarSign className="h-8 w-8 text-white" strokeWidth={3} />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Sales & Revenue</h3>
+            <p className="text-gray-600">View sales analytics & revenue reports</p>
           </Link>
 
           {/* Activity Monitor Card - ACCORDION */}

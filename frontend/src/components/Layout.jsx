@@ -19,6 +19,11 @@ import Badge from './Badge';
 export default function Layout() {
   const navItems = [
     { to: '/', icon: Activity, label: 'Dashboard', exact: true },
+    { to: '/closers', icon: Briefcase, label: 'Closers' },
+    { to: '/setters', icon: Target, label: 'Setters' },
+    { to: '/numbers', icon: Phone, label: 'Active Numbers' },
+    { to: '/bulk-purchase', icon: ShoppingCart, label: 'Bulk Purchase' },
+    { to: '/analytics', icon: BarChart3, label: 'Analytics' },
   ];
 
   return (

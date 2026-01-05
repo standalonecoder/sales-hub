@@ -1,5 +1,6 @@
 import express from 'express';
 import twilioService from '../services/twilioService.js';
+import dbAnalytics from '../services/databaseAnalyticsService.js';
 
 const router = express.Router();
 
@@ -8,26 +9,22 @@ router.get('/overview', async (req, res) => {
   try {
     const { days = 7 } = req.query;
     
-    console.log(`[Analytics] Getting overview for last ${days} days`);
+    console.log(`[Analytics] Getting overview for last ${days} days from DATABASE`);
     
-    const stats = await twilioService.getAllNumbersCallStats(parseInt(days));
+    const stats = await dbAnalytics.getOverview(parseInt(days));
     
-    console.log(`[Analytics] Successfully got stats:`, {
-      totalNumbers: stats.numbers?.length || 0,
-      totalCalls: stats.summary?.totalCalls || 0
-    });
+    console.log(`[Analytics] ✅ Got stats from database`);
     
     res.json({
       success: true,
-      data: stats
+      data: stats,
+      source: 'database'
     });
   } catch (error) {
     console.error('[Analytics] Error getting overview:', error.message);
-    console.error('[Analytics] Error stack:', error.stack);
     res.status(500).json({
       success: false,
-      error: error.message,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      error: error.message
     });
   }
 });
@@ -42,13 +39,31 @@ router.get('/number/:phoneNumber', async (req, res) => {
     // URL decode the phone number
     const decodedNumber = decodeURIComponent(phoneNumber);
     
-    console.log(`[Analytics] Getting stats for ${decodedNumber}`);
+    console.log(`[Analytics] Getting stats for ${decodedNumber} from DATABASE`);
     
-    const stats = await twilioService.getNumberCallStats(decodedNumber, parseInt(days));
+    // Use database for faster queries
+    const calls = await dbAnalytics.getCallLogs({
+      phoneNumber: decodedNumber,
+      startDate: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(),
+      limit: 10000
+    });
+    
+    const totalCalls = calls.length;
+    const completedCalls = calls.filter(c => c.status === 'completed').length;
+    const avgDuration = completedCalls > 0 
+      ? Math.round(calls.reduce((sum, c) => sum + c.duration, 0) / completedCalls)
+      : 0;
     
     res.json({
       success: true,
-      data: stats
+      data: {
+        phoneNumber: decodedNumber,
+        totalCalls,
+        completedCalls,
+        avgDuration,
+        calls: calls.slice(0, 100) // Return last 100 for details
+      },
+      source: 'database'
     });
   } catch (error) {
     console.error('[Analytics] Error getting number stats:', error);
@@ -62,22 +77,24 @@ router.get('/number/:phoneNumber', async (req, res) => {
 // GET /api/analytics/calls - Get raw call logs with filters
 router.get('/calls', async (req, res) => {
   try {
-    const { phoneNumber, startDate, endDate, limit = 100, status } = req.query;
+    const { phoneNumber, startDate, endDate, limit = 1000, status, setter } = req.query;
     
-    console.log(`[Analytics] Getting call logs with filters`);
+    console.log(`[Analytics] Getting call logs from DATABASE`);
     
-    const calls = await twilioService.getCallLogs({
+    const calls = await dbAnalytics.getCallLogs({
       phoneNumber: phoneNumber ? decodeURIComponent(phoneNumber) : null,
       startDate,
       endDate,
       limit: parseInt(limit),
-      status
+      status,
+      setter
     });
     
     res.json({
       success: true,
       count: calls.length,
-      calls
+      calls,
+      source: 'database'
     });
   } catch (error) {
     console.error('[Analytics] Error getting calls:', error);
@@ -93,21 +110,22 @@ router.get('/setters', async (req, res) => {
   try {
     const { days = 7 } = req.query;
     
-    console.log(`[Analytics] Getting setter performance for last ${days} days`);
+    console.log(`[Analytics] Getting setter performance for last ${days} days from DATABASE`);
     
-    const stats = await twilioService.getSetterPerformance(parseInt(days));
+    const stats = await dbAnalytics.getSetterPerformance(parseInt(days));
+    
+    console.log(`[Analytics] ✅ Got setter performance from database`);
     
     res.json({
       success: true,
-      data: stats
+      data: stats,
+      source: 'database'
     });
   } catch (error) {
     console.error('[Analytics] Error getting setter performance:', error.message);
-    console.error('[Analytics] Error stack:', error.stack);
     res.status(500).json({
       success: false,
-      error: error.message,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      error: error.message
     });
   }
 });

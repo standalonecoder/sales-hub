@@ -7,6 +7,35 @@ import twilioService from '../services/twilioService.js';
 
 const router = express.Router();
 
+// Cache for Twilio numbers (5 minute TTL)
+let numbersCache = {
+  data: null,
+  timestamp: 0,
+  ttl: 5 * 60 * 1000 // 5 minutes
+};
+
+async function getCachedTwilioNumbers() {
+  const now = Date.now();
+  
+  // Return cached data if still valid
+  if (numbersCache.data && (now - numbersCache.timestamp) < numbersCache.ttl) {
+    console.log(`[Closers] Using cached Twilio numbers (age: ${Math.round((now - numbersCache.timestamp) / 1000)}s)`);
+    return numbersCache.data;
+  }
+  
+  // Fetch fresh data
+  console.log('[Closers] Fetching fresh Twilio numbers...');
+  const numbers = await twilioService.getAllNumbers();
+  
+  // Update cache
+  numbersCache.data = numbers;
+  numbersCache.timestamp = now;
+  
+  console.log(`[Closers] Cached ${numbers.length} Twilio numbers`);
+  return numbers;
+}
+
+
 // GET /api/closers/licenses - Check license availability across all platforms
 router.get('/licenses', async (req, res) => {
   try {
@@ -77,9 +106,11 @@ router.get('/', async (req, res) => {
     const ghlUsers = await ghlService.getUsers();
     console.log(`[Closers] Found ${ghlUsers.length} users in GHL`);
     
-    // Get all Twilio numbers
-    const twilioNumbers = await twilioService.getAllNumbers();
-    console.log(`[Closers] Found ${twilioNumbers.length} Twilio numbers`);
+    // OPTIMIZED: Use cached Twilio numbers, then filter to 650 only
+    console.log('[Closers] Getting Twilio numbers (cached if available)...');
+    const allNumbers = await getCachedTwilioNumbers();
+    const twilioNumbers = allNumbers.filter(n => n.phoneNumber?.includes('+1650'));
+    console.log(`[Closers] Filtered to ${twilioNumbers.length} 650 numbers (from ${allNumbers.length} total)`);
     
     // Get numbers WITH GHL status (same as Active Numbers page)
     const numbersWithStatus = await ghlService.compareWithTwilio(twilioNumbers);

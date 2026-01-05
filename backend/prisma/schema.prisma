@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -133,4 +133,78 @@ model OnboardingRecord {
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+}
+
+// ========================================
+// MODELS FOR EXISTING POSTGRESQL TABLES
+// ========================================
+
+model SetterCall {
+  id                String   @id @default(uuid())
+  callSid           String?  @map("call_sid")
+  from              String?
+  to                String?
+  status            String?
+  duration          Int?
+  startTime         DateTime? @map("start_time")
+  endTime           DateTime? @map("end_time")
+  direction         String?
+  answeredBy        String?  @map("answered_by")
+  phoneNumberSid    String?  @map("phone_number_sid")
+  price             String?
+  priceUnit         String?  @map("price_unit")
+  setter            String?  // Setter email or identifier
+  setterId          String?  @map("setter_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("setter_calls")
+}
+
+model BookedCall {
+  id                String   @id @default(uuid())
+  contactName       String?  @map("contact_name")
+  contactEmail      String?  @map("contact_email")
+  contactPhone      String?  @map("contact_phone")
+  eventType         String?  @map("event_type")
+  eventStartTime    DateTime? @map("event_start_time")
+  eventEndTime      DateTime? @map("event_end_time")
+  eventStatus       String?  @map("event_status")
+  setter            String?  // Setter who booked it
+  setterId          String?  @map("setter_id")
+  calendlyEventUri  String?  @map("calendly_event_uri")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("booked_calls")
+}
+
+model Setter {
+  id                String   @id @default(uuid())
+  name              String?
+  email             String?  @unique
+  phoneNumber       String?  @map("phone_number")
+  ghlUserId         String?  @map("ghl_user_id")
+  status            String?  @default("active")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("setters")
+}
+
+model Sale {
+  id                String   @id @default(uuid())
+  customerName      String?  @map("customer_name")
+  customerEmail     String?  @map("customer_email")
+  amount            Float?
+  status            String?  // completed, pending, refunded, etc.
+  paymentMethod     String?  @map("payment_method")
+  product           String?
+  closer            String?  // Closer who made the sale
+  closerId          String?  @map("closer_id")
+  saleDate          DateTime? @map("sale_date")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("sales")
 }
