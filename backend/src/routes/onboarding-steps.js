@@ -195,6 +195,7 @@ router.post('/ghl-and-twilio', async (req, res) => {
     let ghlUserId = null;
     let twilioNumber = null;
     let ghlAlreadyExists = false;
+    let twilioAlreadyPurchased = false;
 
     // Check if GHL user already exists
     const existingGhlUser = await ghlService.getUserByEmail(email);
@@ -216,7 +217,7 @@ router.post('/ghl-and-twilio', async (req, res) => {
       }
     }
 
-    // Purchase Twilio 650 number
+    // Purchase Twilio 650 number with conflict handling
     try {
       console.log('[Onboard Step 4] Purchasing 650 number...');
       const availableNumbers = await twilioService.searchAvailableNumbers('650', 5);
@@ -228,21 +229,72 @@ router.post('/ghl-and-twilio', async (req, res) => {
       const numberToPurchase = availableNumbers[0].phoneNumber;
       const friendlyName = `${firstName} ${lastName}`;
 
-      // Purchase the number
-      const purchased = await twilioService.purchaseNumber(numberToPurchase, friendlyName);
-      twilioNumber = purchased.phoneNumber;
+      // ========================================
+      // FIX: Check if number already exists in Twilio
+      // ========================================
+      console.log('[Onboard Step 4] Checking if number already exists in Twilio...');
+      const existingTwilioNumbers = await twilioService.getAllNumbers();
+      const numberExists = existingTwilioNumbers.find(n => n.phoneNumber === numberToPurchase);
 
-      // Add to messaging service
-      await twilioService.addToMessagingService(purchased.sid);
+      if (numberExists) {
+        console.log(`[Onboard Step 4] ⚠️ Number ${numberToPurchase} already purchased`);
+        twilioNumber = numberExists.phoneNumber;
+        twilioAlreadyPurchased = true;
 
-      // Add to A2P campaign
-      await twilioService.addToCampaign(purchased.sid);
+        // Update friendly name if needed
+        if (numberExists.friendlyName !== friendlyName) {
+          console.log('[Onboard Step 4] Updating friendly name...');
+          await twilioService.updateNumber(numberExists.sid, { friendlyName });
+        }
 
-      console.log(`[Onboard Step 4] ✅ 650 number purchased: ${twilioNumber}`);
+        // Ensure it's in messaging service
+        console.log('[Onboard Step 4] Ensuring number is in messaging service...');
+        await twilioService.addToMessagingService(numberExists.sid);
+
+        console.log(`[Onboard Step 4] ✅ Using existing number: ${twilioNumber}`);
+      } else {
+        // Purchase the number
+        console.log(`[Onboard Step 4] Purchasing new number: ${numberToPurchase}`);
+        const purchased = await twilioService.purchaseNumber(numberToPurchase, friendlyName);
+        twilioNumber = purchased.phoneNumber;
+
+        // Add to messaging service
+        await twilioService.addToMessagingService(purchased.sid);
+
+        // Add to A2P campaign
+        await twilioService.addToCampaign(purchased.sid);
+
+        console.log(`[Onboard Step 4] ✅ 650 number purchased: ${twilioNumber}`);
+      }
     } catch (error) {
       console.error('[Onboard Step 4] Twilio purchase failed:', error.message);
-      // Don't fail the whole step if Twilio fails - GHL account is still created
-      twilioNumber = 'Failed to purchase - contact admin';
+      
+      // Check if it's a 409 conflict error (number already purchased)
+      if (error.message && error.message.includes('409')) {
+        console.log('[Onboard Step 4] Number conflict detected, checking existing numbers...');
+        try {
+          // Get all Twilio numbers and find one with matching friendly name
+          const existingNumbers = await twilioService.getAllNumbers();
+          const matchingNumber = existingNumbers.find(n => 
+            n.friendlyName === `${firstName} ${lastName}` || 
+            n.phoneNumber.includes('650')
+          );
+          
+          if (matchingNumber) {
+            twilioNumber = matchingNumber.phoneNumber;
+            twilioAlreadyPurchased = true;
+            console.log(`[Onboard Step 4] ✅ Found existing number: ${twilioNumber}`);
+          } else {
+            twilioNumber = 'Conflict - contact admin';
+          }
+        } catch (lookupError) {
+          console.error('[Onboard Step 4] Error looking up existing number:', lookupError.message);
+          twilioNumber = 'Failed to purchase - contact admin';
+        }
+      } else {
+        // Don't fail the whole step if Twilio fails - GHL account is still created
+        twilioNumber = 'Failed to purchase - contact admin';
+      }
     }
 
     res.json({
@@ -251,9 +303,14 @@ router.post('/ghl-and-twilio', async (req, res) => {
       email: email,
       twilioNumber: twilioNumber,
       ghlAlreadyExists: ghlAlreadyExists,
+      twilioAlreadyPurchased: twilioAlreadyPurchased,
       message: ghlAlreadyExists
-        ? 'GHL account already existed, phone number processed'
-        : 'GHL account created and phone number assigned'
+        ? twilioAlreadyPurchased 
+          ? 'GHL account and phone number already existed'
+          : 'GHL account already existed, phone number processed'
+        : twilioAlreadyPurchased
+          ? 'GHL account created, phone number already existed'
+          : 'GHL account created and phone number assigned'
     });
 
   } catch (error) {
